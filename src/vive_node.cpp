@@ -9,6 +9,9 @@
 #include <iostream>
 #include "vive_ros/vr_interface.h"
 #include <geometry_msgs/TwistStamped.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/Pose.h>
+#include <math.h>
 
 using namespace std;
 
@@ -458,6 +461,8 @@ class VIVEnode
     ros::Publisher twist0_pub_;
     ros::Publisher twist1_pub_;
     ros::Publisher twist2_pub_;
+    ros::Publisher twist3_pub_;
+    ros::Publisher twist4_pub_;
     std::map<std::string, ros::Publisher> button_states_pubs_map;
     ros::Subscriber feedback_sub_;
 
@@ -479,6 +484,8 @@ VIVEnode::VIVEnode(int rate)
   twist0_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist0", 10);
   twist1_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist1", 10);
   twist2_pub_ = nh_.advertise<geometry_msgs::TwistStamped>("/vive/twist2", 10);
+  twist3_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/vive/twist3", 10);
+  twist4_pub_ = nh_.advertise<geometry_msgs::PoseStamped>("/vive/twist4", 10);
   feedback_sub_ = nh_.subscribe("/vive/set_feedback", 10, &VIVEnode::set_feedback, this);
 
 #ifdef USE_IMAGE
@@ -668,7 +675,55 @@ void VIVEnode::Run()
     tf_broadcaster_.sendTransform(tf::StampedTransform(tf_world, ros::Time::now(), "world", "world_vive"));
 
     // Publish twist messages for controller1 and controller2
-    double lin_vel[3], ang_vel[3];
+    double lin_vel[3], ang_vel[3], tran_mat[3][4];
+    if (vr_.GetDeviceMatrix(1,tran_mat))
+    {
+      geometry_msgs::Pose pose_hand;
+      pose_hand.position.x = tran_mat[0][3];
+      pose_hand.position.y = tran_mat[1][3];
+      pose_hand.position.z = tran_mat[2][3];
+      /*pose_hand.angular.x = atan2(tran_mat[1][0],tran_mat[0][0])*180/3.14;
+      pose_hand.angular.y = atan2(-tran_mat[2][0],sqrt((tran_mat[2][1]*tran_mat[2][1])+(tran_mat[2][2]*tran_mat[2][2])))*180/3.14;
+      //pose_hand.angular.y = -asin(tran_mat[2][0])*180/3.14;
+      pose_hand.angular.z = atan2(tran_mat[2][1],tran_mat[2][2])*180/3.14;*/
+      pose_hand.orientation.w = sqrt(fmax(0, 1 + tran_mat[0][0] + tran_mat[1][1] + tran_mat[2][2])) / 2;
+      pose_hand.orientation.x = sqrt(fmax(0, 1 + tran_mat[0][0] - tran_mat[1][1] - tran_mat[2][2])) / 2;
+      pose_hand.orientation.y = sqrt(fmax(0, 1 - tran_mat[0][0] + tran_mat[1][1] - tran_mat[2][2])) / 2;
+      pose_hand.orientation.z = sqrt(fmax(0, 1 - tran_mat[0][0] - tran_mat[1][1] + tran_mat[2][2])) / 2;
+      pose_hand.orientation.x = copysign(pose_hand.orientation.x, tran_mat[2][1] - tran_mat[1][2]);
+      pose_hand.orientation.y = copysign(pose_hand.orientation.y, tran_mat[0][2] - tran_mat[2][0]);
+      pose_hand.orientation.z = copysign(pose_hand.orientation.z, tran_mat[1][0] - tran_mat[0][1]);
+      
+      geometry_msgs::PoseStamped pose_hand_stamped;
+      pose_hand_stamped.header.stamp = ros::Time::now();
+      pose_hand_stamped.header.frame_id = "world_vive";
+      pose_hand_stamped.pose = pose_hand;
+      twist3_pub_.publish(pose_hand_stamped);
+    }
+    if (vr_.GetDeviceMatrix(2,tran_mat))
+    {
+      geometry_msgs::Pose pose_hand;
+      pose_hand.position.x = tran_mat[0][3];
+      pose_hand.position.y = tran_mat[1][3];
+      pose_hand.position.z = tran_mat[2][3];
+      /*pose_hand.angular.x = atan2(tran_mat[1][0],tran_mat[0][0])*180/3.14;
+      pose_hand.angular.y = atan2(-tran_mat[2][0],sqrt((tran_mat[2][1]*tran_mat[2][1])+(tran_mat[2][2]*tran_mat[2][2])))*180/3.14;
+      //pose_hand.angular.y = -asin(tran_mat[2][0])*180/3.14;
+      pose_hand.angular.z = atan2(tran_mat[2][1],tran_mat[2][2])*180/3.14;*/
+      pose_hand.orientation.w = sqrt(fmax(0, 1 + tran_mat[0][0] + tran_mat[1][1] + tran_mat[2][2])) / 2;
+      pose_hand.orientation.x = sqrt(fmax(0, 1 + tran_mat[0][0] - tran_mat[1][1] - tran_mat[2][2])) / 2;
+      pose_hand.orientation.y = sqrt(fmax(0, 1 - tran_mat[0][0] + tran_mat[1][1] - tran_mat[2][2])) / 2;
+      pose_hand.orientation.z = sqrt(fmax(0, 1 - tran_mat[0][0] - tran_mat[1][1] + tran_mat[2][2])) / 2;
+      pose_hand.orientation.x = copysign(pose_hand.orientation.x, tran_mat[2][1] - tran_mat[1][2]);
+      pose_hand.orientation.y = copysign(pose_hand.orientation.y, tran_mat[0][2] - tran_mat[2][0]);
+      pose_hand.orientation.z = copysign(pose_hand.orientation.z, tran_mat[1][0] - tran_mat[0][1]);
+      
+      geometry_msgs::PoseStamped pose_hand_stamped;
+      pose_hand_stamped.header.stamp = ros::Time::now();
+      pose_hand_stamped.header.frame_id = "world_vive";
+      pose_hand_stamped.pose = pose_hand;
+      twist4_pub_.publish(pose_hand_stamped);
+    }
     if (vr_.GetDeviceVel(0, lin_vel, ang_vel))
     {
         geometry_msgs::Twist twist_msg;
